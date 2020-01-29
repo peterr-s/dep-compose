@@ -1,9 +1,11 @@
 use std::io;
+use std::collections::HashSet;
 
 fn main() {
     // get all sentences in ConLL format
-    let mut sentences: Vec<Parse> = Vec::new();
-    let mut current_sentence: Parse = Parse { tokens: Vec::new() };
+    let mut parses: Vec<Parse> = Vec::new();
+    let mut current_parse: Parse = Parse { tokens: Vec::new() };
+    let mut dependencies: HashSet<String> = HashSet::new();
     loop {
         // get line and handle EOF case
         let mut line: String = String::new();
@@ -18,10 +20,10 @@ fn main() {
         // empty string denotes the end of a sentence
         if line.trim().is_empty() {
             // don't redo work if last line was also empty
-            if !current_sentence.tokens.is_empty() {
+            if !current_parse.tokens.is_empty() {
                 // consider the last sentence complete and start the next
-                sentences.push(current_sentence);
-                current_sentence = Parse { tokens: Vec::new() };
+                parses.push(current_parse);
+                current_parse = Parse { tokens: Vec::new() };
             }
 
             // do not bother processing this line
@@ -43,8 +45,11 @@ fn main() {
             dependency: String::from(line[7]),
         };
 
+        // add dependency to set
+        dependencies.insert(String::from(token.dependency.as_str()));
+
         // add word to sentence
-        current_sentence.tokens.push(token);
+        current_parse.tokens.push(token);
     }
     println!("End of input reached");
 
@@ -59,10 +64,35 @@ fn main() {
     // TODO train embeddings
     //println!("Word embeddings trained");
 
-    // TODO find dependencies between adjacent tokens
-    // note: all such will include exactly one leaf, but not all leaves will be used
-    // can this be stretched to all leaves? will include longer, less trainable ngrams
-    //println!("Trainable pairs found");
+    // find dependencies between adjacent tokens
+    let mut bigrams: HashSet<Bigram> = HashSet::new();
+    for parse in &parses {
+        for token in &parse.tokens {
+            // get adjacent head before
+            if (token.head > 0)  // ignore tokens deriving from root
+                && (token.head < parse.tokens.len())
+                && (parse.tokens[token.head] == *token)
+            // indices are offset by 1 due to 0 root
+            {
+                bigrams.insert(Bigram {
+                    tail: String::from(token.surface.as_str()),
+                    head: String::from(parse.tokens[token.head - 1].surface.as_str()),
+                    dependency: String::from(token.dependency.as_str()),
+                });
+            }
+
+            // get adjacent head after
+            else if (token.head > 2) && (parse.tokens[token.head - 2] == *token) {
+                // indices are offset by 1
+                bigrams.insert(Bigram {
+                    tail: String::from(token.surface.as_str()),
+                    head: String::from(parse.tokens[token.head - 1].surface.as_str()),
+                    dependency: String::from(token.dependency.as_str()),
+                });
+            }
+        }
+    }
+    println!("Trainable pairs found");
 
     // TODO verify that each dependency type is used
 
@@ -70,9 +100,20 @@ fn main() {
     //println!("Phrase embeddings trained");
 }
 
+#[derive(PartialEq, Eq)]
 struct Token {
     surface: String,
     head: usize,
+    dependency: String,
+}
+
+// this only supports one direction of dependency
+// fine because we will be rewriting the sentences and treating the bigram as one token
+// this means we can just re-order to always be head-final
+#[derive(PartialEq, Eq, Hash)]
+struct Bigram {
+    tail: String,
+    head: String,
     dependency: String,
 }
 

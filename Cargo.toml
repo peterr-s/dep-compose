@@ -1,5 +1,5 @@
 [package]
-name = "tree-compose"
+name = "dep-compose"
 version = "0.1.0"
 authors = ["Peter Schoener <peter.c.schoener@gmail.com>"]
 edition = "2018"
