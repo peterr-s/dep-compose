@@ -1,4 +1,4 @@
-# tree-compose
+# dep-compose
 
 This is a further development of a project that started as a class assignment. In it, I attempt to train a recursive neural net to compose phrase or sentence embeddings. Because it is now a personal project and I don't have to use Python, I will be rewriting large parts of it in Rust.
 
