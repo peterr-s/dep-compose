@@ -1,5 +1,5 @@
-use std::io;
 use std::collections::HashSet;
+use std::io;
 
 fn main() {
     // get all sentences in ConLL format
@@ -80,7 +80,6 @@ fn main() {
                     dependency: String::from(token.dependency.as_str()),
                 });
             }
-
             // get adjacent head after
             else if (token.head > 2) && (parse.tokens[token.head - 2] == *token) {
                 // indices are offset by 1
@@ -94,7 +93,18 @@ fn main() {
     }
     println!("Trainable pairs found");
 
-    // TODO verify that each dependency type is used
+    // verify that each dependency type is used
+    for bigram in &bigrams {
+        dependencies.remove(&bigram.dependency);
+    }
+    if dependencies.is_empty() {
+        println!("Trainable instances of all dependencies found");
+    } else {
+        println!("Warning: No trainable instances found for:");
+        for dependency in dependencies {
+            println!("{}", dependency);
+        }
+    }
 
     // TODO train each phrase embedding separately and add all to dictionary
     //println!("Phrase embeddings trained");
