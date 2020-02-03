@@ -18,12 +18,25 @@ class Word :
     def __str__(self) :
         return self.surface
 
-sent_embedding_dim = 4800
-hidden_size = 9600
-max_sent_len = 5
-learning_rate = 0.2
-epoch_ct = 200
-sigmoid_cutoff = 8
+# TODO find better solution
+def n(n_str) :
+    try :
+        return int(n_str)
+    except ValueError :
+        pass
+    return float(n_str)
+
+# read hyperparameters from file
+with open("./.hyperparams.conf", "r") as hyperparameter_file :
+    for line in hyperparameter_file.readlines() :
+        fields = line.trim().split()
+        hparams[fields[0]] = n(fields[1])
+sent_embedding_dim = hparams["sent_embedding_dim"]
+hidden_size = hparams["hidden_size"]
+# max_sent_len = hparams["max_sent_len"] # TODO remove; left for testing for now
+learning_rate = hparams["learning_rate"]
+epoch_ct = hparams["epoch_ct"]
+sigmoid_cutoff = hparams["sigmoid_cutoff"]
 
 # this prevents the weights from being perpetually adjusted after they're good enough
 def cutoff_sigmoid(x, name = None) :
@@ -40,34 +53,19 @@ def cutoff_sigmoid(x, name = None) :
             )
     return neg_mask
 
-# load training sentences from input file
-sentences = list()
+# load training phrases from input file
+phrases = list()
 with open(sys.argv[1], "r") as train_file :
-    sentence = list()
-
+    # phrase structure: [head, tail, dependency, [y_1, y_2, ...]]
     for line in train_file.readlines() :
-        if line[0] == "#" : # ignore commented lines
-            continue
-        elif line.strip() == "" : # blank lines denote a sentence boundary
-            if len(sentence) <= max_sent_len :
-                # associate each word except the root with its children
-                for i in range(1, len(sentence)) :
-                    sentence[sentence[i].parent].children.add(sentence[i])
-                # add to training set
-                sentences.append(sentence)
-
-            sentence = [Word("0 %ROOT %ROOT - - - 0 %ROOT - -")]
-        else :
-            sentence.append(Word(line))
-
-    if not sentences[-1] == sentence : # guard against lack of trailing newline
-        sentences.append(sentence)
+        fields = line.strip().split()
+        phrase = fields[:3] # [head, tail, dependency]
+        phrase.append(fields[3:]) # target embedding
 
 # load embeddings
 embeddings = KeyedVectors.load_word2vec_format(sys.argv[3], binary = False)
 word_embedding_dim = embeddings.vector_size
 null_word = np.zeros(word_embedding_dim)
-#null_word = np.random.rand(word_embedding_dim)
 
 skipthoughts_model = skipthoughts.load_model()
 skipthoughts_encoder = skipthoughts.Encoder(skipthoughts_model)
