@@ -10,3 +10,4 @@ In this variation, the key difference is that the target embeddings will be thos
 
 The new challenge that this presents is the efficient generation of those ngram embeddings, and that will be the first focus.
 
+Part of the reason that the old version used word2vec in particular was that it grew out of an adaptation of an earlier project (my Bachelor's thesis) that looked at compatibility of constituents in a candidate phrase. That is arguably a syntactically heavier problem than this one, and one of the key differences between word2vec and, for instance, GloVe, is that word2vec encodes a relatively large amount of syntactic information due to its focus on proximity. However, now we mainly want semantics. Is word2vec still advantageous? This will be a new question that needs to be tested in conjunction with the rest of the changes in order to give the model a good chance at doing anything meaningful.
