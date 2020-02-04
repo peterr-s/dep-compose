@@ -37,6 +37,12 @@ hidden_size = hparams["hidden_size"]
 learning_rate = hparams["learning_rate"]
 epoch_ct = hparams["epoch_ct"]
 sigmoid_cutoff = hparams["sigmoid_cutoff"]
+batch_size = hparams["batch_size"]
+
+# we need a fixed length for the embedding phrases
+# remember, this must be meaningfully less than twice the word embedding dimensionality, else it might just learn to concatenate the vectors
+if sent_embedding_dim < (2 * word_embedding_dim) :
+    print("warning: too many output dimensions!", file = sys.stderr)
 
 # this prevents the weights from being perpetually adjusted after they're good enough
 def cutoff_sigmoid(x, name = None) :
@@ -67,12 +73,6 @@ embeddings = KeyedVectors.load_word2vec_format(sys.argv[3], binary = False)
 word_embedding_dim = embeddings.vector_size
 null_word = np.zeros(word_embedding_dim)
 
-skipthoughts_model = skipthoughts.load_model()
-skipthoughts_encoder = skipthoughts.Encoder(skipthoughts_model)
-
-sentence_embeddings = skipthoughts_encoder.encode([" ".join([w.surface for w in s]) for s in sentences])
-batch_size = sentence_embeddings.shape[0]
-
 # set up target
 y = tf.placeholder(dtype = tf.float32, shape = [sent_embedding_dim, batch_size], name = "y")
 
@@ -80,6 +80,7 @@ y = tf.placeholder(dtype = tf.float32, shape = [sent_embedding_dim, batch_size],
 t = tf.get_variable("t", dtype = tf.float32, shape = [sent_embedding_dim, word_embedding_dim], trainable = True)
 
 # recursive graph building
+# this no longer needs to be recursive if we only do bigrams, but any more and it does
 def compose_embedding(word) :
     with tf.variable_scope("compose", reuse = tf.AUTO_REUSE) :
         x = tf.Variable(
