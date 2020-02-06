@@ -5,7 +5,6 @@ import tensorflow as tf
 import numpy as np
 from gensim.models import KeyedVectors
 from gensim.test.utils import datapath
-import skipthoughts
 
 class Word :
     def __init__(self, line) :
@@ -27,17 +26,24 @@ def n(n_str) :
     return float(n_str)
 
 # read hyperparameters from file
-with open("./.hyperparams.conf", "r") as hyperparameter_file :
+hparams = dict()
+with open("./hyperparams.conf", "r") as hyperparameter_file :
     for line in hyperparameter_file.readlines() :
-        fields = line.trim().split()
-        hparams[fields[0]] = n(fields[1])
+        fields = line.strip().split()
+        if len(fields) > 1 :
+            hparams[fields[0]] = n(fields[1])
 sent_embedding_dim = hparams["sent_embedding_dim"]
 hidden_size = hparams["hidden_size"]
 # max_sent_len = hparams["max_sent_len"] # TODO remove; left for testing for now
 learning_rate = hparams["learning_rate"]
 epoch_ct = hparams["epoch_ct"]
 sigmoid_cutoff = hparams["sigmoid_cutoff"]
-batch_size = hparams["batch_size"]
+#batch_size = hparams["batch_size"] # why was a batch previously the entire training set? regardless, we need a new size
+
+# load embeddings
+embeddings = KeyedVectors.load_word2vec_format(sys.argv[3], binary = False)
+word_embedding_dim = embeddings.vector_size
+null_word = np.zeros(word_embedding_dim)
 
 # we need a fixed length for the embedding phrases
 # remember, this must be meaningfully less than twice the word embedding dimensionality, else it might just learn to concatenate the vectors
@@ -67,11 +73,6 @@ with open(sys.argv[1], "r") as train_file :
         fields = line.strip().split()
         phrase = fields[:3] # [head, tail, dependency]
         phrase.append(fields[3:]) # target embedding
-
-# load embeddings
-embeddings = KeyedVectors.load_word2vec_format(sys.argv[3], binary = False)
-word_embedding_dim = embeddings.vector_size
-null_word = np.zeros(word_embedding_dim)
 
 # set up target
 y = tf.placeholder(dtype = tf.float32, shape = [sent_embedding_dim, batch_size], name = "y")

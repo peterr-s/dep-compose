@@ -1,5 +1,17 @@
 use std::collections::HashSet;
 use std::io;
+use std::io::Read;
+use std::fs::File;
+
+extern crate tensorflow;
+use tensorflow::Graph;
+use tensorflow::ImportGraphDefOptions;
+use tensorflow::Operation;
+use tensorflow::OutputToken;
+use tensorflow::Session;
+use tensorflow::SessionOptions;
+use tensorflow::StepWithGraph;
+use tensorflow::Tensor;
 
 fn main() {
     // get all sentences in ConLL format
@@ -108,6 +120,20 @@ fn main() {
 
     // TODO train each phrase embedding separately and add all to dictionary
     //println!("Phrase embeddings trained");
+    
+    // load graph
+    let mut graph: Graph = Graph::new();
+    let mut proto: Vec<u8> = Vec::new();
+    {
+        let mut graph_file: File = File::open("graph.pb").expect("Could not open graph file");
+        graph_file.read_to_end(&mut proto)
+            .expect("Could not read graph file");
+    }
+    graph.import_graph_def(&proto, &ImportGraphDefOptions::new())
+        .expect("Could not import graph");
+    
+    // TODO run graph
+    let mut session: Session = Session::new(&SessionOptions::new(), &graph).expect("Could not start session");
 }
 
 #[derive(PartialEq, Eq)]
