@@ -50,21 +50,6 @@ null_word = np.zeros(word_embedding_dim)
 if sent_embedding_dim < (2 * word_embedding_dim) :
     print("warning: too many output dimensions!", file = sys.stderr)
 
-# this prevents the weights from being perpetually adjusted after they're good enough
-def cutoff_sigmoid(x, name = None) :
-    pos_mask = tf.where(
-            tf.greater(x, sigmoid_cutoff),
-            x = tf.fill(x.shape, 1.0),
-            y = tf.sigmoid(x)
-            )
-    neg_mask = tf.where(
-            tf.less(pos_mask, -sigmoid_cutoff),
-            x = tf.fill(x.shape, 0.0),
-            y = pos_mask,
-            name = name
-            )
-    return neg_mask
-
 # load training phrases from input file
 phrases = list()
 with open(sys.argv[1], "r") as train_file :
@@ -82,6 +67,7 @@ t = tf.get_variable("t", dtype = tf.float32, shape = [sent_embedding_dim, word_e
 
 # recursive graph building
 # this no longer needs to be recursive if we only do bigrams, but any more and it does
+# the new idiomatic way to do this is with the Keras Functional API
 def compose_embedding(word) :
     with tf.variable_scope("compose", reuse = tf.AUTO_REUSE) :
         x = tf.Variable(
@@ -118,7 +104,7 @@ def compose_embedding(word) :
                     )
             
             x = tf.math.l2_normalize(
-                        cutoff_sigmoid(
+                        tf.keras.activations.hard_sigmoid(
                         tf.matmul(
                             w2,
                             cutoff_sigmoid(
