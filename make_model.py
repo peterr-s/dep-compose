@@ -34,16 +34,29 @@ with open("./hyperparams.conf", "r") as hyperparameter_file :
             hparams[fields[0]] = n(fields[1])
 sent_embedding_dim = hparams["sent_embedding_dim"]
 hidden_size = hparams["hidden_size"]
-# max_sent_len = hparams["max_sent_len"] # TODO remove; left for testing for now
 learning_rate = hparams["learning_rate"]
 epoch_ct = hparams["epoch_ct"]
 sigmoid_cutoff = hparams["sigmoid_cutoff"]
-#batch_size = hparams["batch_size"] # why was a batch previously the entire training set? regardless, we need a new size
+dep_embedding_dim = hparams["dep_embedding_dim"]
 
 # load embeddings
 embeddings = KeyedVectors.load_word2vec_format(sys.argv[3], binary = False)
 word_embedding_dim = embeddings.vector_size
 null_word = np.zeros(word_embedding_dim)
+
+# convert embeddings to Keras lookup structure
+embedding_mat = np.zeros((len(embeddings.wv.vocab) + 1, word_embedding_dim))
+word_to_idx = {embeddings.wv.index2word[i]: i for i in range(len(embeddings.wv.vocab))}
+for i in range(len(embeddings.wv.vocab)) :
+    e = embeddings.wv[model.wv.index2word[i]]
+    embedding_mat[i] = e if e is not None else null_word
+embedding_mat[-1] = null_word
+word_embedding_layer = tf.keras.Embedding(
+        input_dim = embedding_mat.shape[0],
+        output_dim = embedding_mat.shape[1],
+        weights = [embedding_mat],
+        trainable = False
+        )
 
 # we need a fixed length for the embedding phrases
 # remember, this must be meaningfully less than twice the word embedding dimensionality, else it might just learn to concatenate the vectors
@@ -52,72 +65,39 @@ if sent_embedding_dim < (2 * word_embedding_dim) :
 
 # load training phrases from input file
 phrases = list()
+dep_to_idx = dict()
+idx_to_dep = set()
 with open(sys.argv[1], "r") as train_file :
     # phrase structure: [head, tail, dependency, [y_1, y_2, ...]]
     for line in train_file.readlines() :
         fields = line.strip().split()
         phrase = fields[:3] # [head, tail, dependency]
-        phrase.append(fields[3:]) # target embedding
+        phrases.append(fields[3:]) # target embedding
+        idx_to_dep.add(phrase[2])
+idx_to_dep = list(idx_to_dep)
+dep_to_idx = {idx_to_dep[i] for i in range(len(idx_to_dep))}
+
+# create dependency embedding lookup structure
+dep_embedding_layer = tf.keras.Embedding(
+        input_dim = len(idx_to_dep),
+        output_dim = dep_embedding_dim
+        )
 
 # set up target
 y = tf.placeholder(dtype = tf.float32, shape = [sent_embedding_dim, batch_size], name = "y")
-
-# transform word embeddings to sentence dimensionality
-t = tf.get_variable("t", dtype = tf.float32, shape = [sent_embedding_dim, word_embedding_dim], trainable = True)
 
 # recursive graph building
 # this no longer needs to be recursive if we only do bigrams, but any more and it does
 # the new idiomatic way to do this is with the Keras Functional API
 def compose_embedding(word) :
-    with tf.variable_scope("compose", reuse = tf.AUTO_REUSE) :
-        x = tf.Variable(
-                tf.transpose(
-                    [list(embeddings[word.surface] if word.surface in embeddings else null_word)]
-                    ),
-                trainable = False
-                ) if word.surface is not "%ROOT" else tf.get_variable("x_ROOT", trainable = False) # make the embedding untrainable EXCEPT for root
-        x = tf.matmul(t, x)
-        for child in word.children :
-            w1 = tf.get_variable(
-                    ("w1_%s" % child.reln),
-                    dtype = tf.float32,
-                    shape = [hidden_size, x.shape[0]],
-                    trainable = True
-                    )
-            b1 = tf.get_variable(
-                    ("b1_%s" % child.reln),
-                    dtype = tf.float32,
-                    shape = [hidden_size, 1],
-                    trainable = True
-                    )
-            w2 = tf.get_variable(
-                    ("w2_%s" % child.reln),
-                    dtype = tf.float32,
-                    shape = [sent_embedding_dim, hidden_size],
-                    trainable = True
-                    )
-            b2 = tf.get_variable(
-                    ("b2_%s" % child.reln),
-                    dtype = tf.float32,
-                    shape = [sent_embedding_dim, 1],
-                    trainable = True
-                    )
-            
-            x = tf.math.l2_normalize(
-                        tf.keras.activations.hard_sigmoid(
-                        tf.matmul(
-                            w2,
-                            cutoff_sigmoid(
-                                tf.matmul(
-                                    w1,
-                                    x
-                                    ) + b1
-                                )
-                            ) + b2
-                        )
-                    )
-
-        return x
+    tail_layer = tf.keras.layers.concatenate([
+            tf.keras.layers.concatenate([
+                compose_embedding(child),
+                dep_embedding_layer(dep_to_idx[child.reln])
+                ])
+            for child in word.children
+            ]) if len(word.children) > 0 else word_embedding_layer(word_to_idx[word.surface])
+    return tf.keras.layers.Dense(sent_embedding_dim)(tail_layer)
 
 if __name__ == "__main__" :
     sess = tf.Session()
