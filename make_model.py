@@ -105,18 +105,26 @@ if __name__ == "__main__" :
     # for each sentence, build a graph and then do a round of training
     preds = list()
     for i, sentence in enumerate(sentences) :
-        preds.append(compose_embedding(sentence[0]))
-    y_pred = tf.concat(preds, axis = 1)
+        graph = compose_embedding(sentence[0])
+        model = keras.Model(
+                inputs = [graph],
+                outputs = [DummyLayer(graph)], # TODO impl DummyLayer for elegance (root transformation is the final for now)
+                )
+        model.compile(
+                optimizer = keras.optimizers.Adam(),
+                loss = keras.losses.CosineSimilarity(),
+                metrics = [keras.metrics.CosineSimilarity()]
+                )
 
-    with tf.variable_scope("train", reuse = tf.AUTO_REUSE) :
-        loss = tf.losses.cosine_distance(tf.math.l2_normalize(y), y_pred, axis = 1)
-        loss = tf.identity(loss, name = "loss")
-        train = tf.train.AdamOptimizer(learning_rate).minimize(loss, name = "train")
+#    with tf.variable_scope("train", reuse = tf.AUTO_REUSE) :
+#        loss = tf.losses.cosine_distance(tf.math.l2_normalize(y), y_pred, axis = 1)
+#        loss = tf.identity(loss, name = "loss")
+#        train = tf.train.AdamOptimizer(learning_rate).minimize(loss, name = "train")
 
-        sess.run(tf.global_variables_initializer())
-        for _ in range(epoch_ct) :
-                l_val, _ = sess.run([loss, train], {y: np.transpose(sentence_embeddings)})
-                print("loss:", l_val)
+#        sess.run(tf.global_variables_initializer())
+#        for _ in range(epoch_ct) :
+#                l_val, _ = sess.run([loss, train], {y: np.transpose(sentence_embeddings)})
+#                print("loss:", l_val)
 
     # test and print results
     sentences = list()
