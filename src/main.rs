@@ -1,7 +1,3 @@
-// DEBUG suppress warnings
-#![allow(deprecated)]
-#![allow(unused)]
-
 use std::collections::HashSet;
 use std::io;
 use std::io::Read;

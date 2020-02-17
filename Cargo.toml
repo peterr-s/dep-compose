@@ -17,7 +17,7 @@ path = "src/main.rs"
 name = "as-text"
 path = "src/as-text.rs"
 
-[[bin]]
+[lib]
 name = "parse"
 path = "src/parse.rs"
 
