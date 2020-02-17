@@ -1,3 +1,5 @@
+use std::io::BufReader;
+
 struct Dependency {
     name: String,
 }
@@ -9,7 +11,7 @@ struct Token {
 }
 impl PartialEq for Token {
     fn eq(&self, other: &Self) -> bool {
-        if (let Some(n) = self.idx) && (let Some(o) = other.idx) {
+        if let (Some(n), Some(o)) = (self.idx, other.idx) {
             n == m
         } else {
             (self.surface == other.surface) && (self.children == other.children)
@@ -23,10 +25,10 @@ struct Parse {
     root: Token,
 }
 impl Parse {
-    fn read_parse(file: &mut BufReader) -> Result<Parse> {
+    fn read_parse(file: &mut BufReader) -> Result<Parse, &str> {
         let mut tokens: Vec<Token> = Vec::new();
         let mut root: Option<Token> = None;
-        let mut deps: Vec<(int, Dependency)> = Vec::new();
+        let mut deps: Vec<(u64, Dependency)> = Vec::new();
 
         loop {
             // get line
@@ -63,33 +65,37 @@ impl Parse {
             let token: Token = Token {
                 surface: String::from(line[1]),
                 children: Vec::new(),
-                idx: from_str::<int>(line[0]).unwrap(),
+                idx: line[0].unwrap().parse::<u64>(),
             };
 
             tokens.push(token);
-            tokens.push((
-                from_str::<int>(line[6]).unwrap(),
+            deps.push((
+                line[6].unwrap().parse::<u64>()?,
                 Dependency {
                     name: String::from(line[7]),
                 },
             ));
         }
 
-        // TODO map dependencies
-        for token in &tokens {}
+        // map dependencies
+        for (i, dep) in deps.iter().enumerate() {
+            &tokens[i].children.push((&(&tokens[dep.0]), dep.1));
+        }
 
         // finalize the parse
         match root {
             Some(r) => {
                 if !tokens.is_empty() {
-                    return Ok(Parse { tokens, r });
+                    Ok(Parse { tokens, r })
+                } else {
+                    Err("Parse is empty")
                 }
             }
             None => Err("Parse has no root"),
         }
     }
     fn get_parent(&self, child: Token) -> Option<Token> {
-        for token in tokens {
+        for token in &self.tokens {
             if token.children.contains(child) {
                 return Some(token);
             }

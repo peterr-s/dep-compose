@@ -1,3 +1,7 @@
+// DEBUG suppress warnings
+#![allow(deprecated)]
+#![allow(unused)]
+
 use std::collections::HashSet;
 use std::io;
 use std::io::Read;
@@ -12,6 +16,8 @@ use tensorflow::Session;
 use tensorflow::SessionOptions;
 use tensorflow::StepWithGraph;
 use tensorflow::Tensor;
+
+mod parse;
 
 fn main() {
     // get all sentences in ConLL format
