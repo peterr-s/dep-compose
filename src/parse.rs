@@ -1,34 +1,37 @@
+use std::fs::File;
+use std::io::BufRead;
 use std::io::BufReader;
 
+#[derive(PartialEq, Eq)]
 struct Dependency {
     name: String,
 }
 
-struct Token {
+struct Token<'a> {
     surface: String,
-    children: Vec<(&Token, Dependency)>,
-    idx: Option<u64>,
+    children: Vec<(&'a Token<'a>, Dependency)>,
+    idx: Option<usize>,
 }
-impl PartialEq for Token {
+impl PartialEq for Token<'_> {
     fn eq(&self, other: &Self) -> bool {
         if let (Some(n), Some(o)) = (self.idx, other.idx) {
-            n == m
+            n == o
         } else {
             (self.surface == other.surface) && (self.children == other.children)
         }
     }
 }
-impl Eq for Token {}
+impl Eq for Token<'_> {}
 
-struct Parse {
-    tokens: Vec<Token>,
-    root: Token,
+struct Parse<'a> {
+    tokens: Vec<Token<'a>>,
+    root: Token<'a>,
 }
-impl Parse {
-    fn read_parse(file: &mut BufReader) -> Result<Parse, &str> {
+impl Parse<'_> {
+    fn read_parse(file: &mut BufReader<File>) -> Result<Parse, &str> {
         let mut tokens: Vec<Token> = Vec::new();
         let mut root: Option<Token> = None;
-        let mut deps: Vec<(u64, Dependency)> = Vec::new();
+        let mut deps: Vec<(usize, Dependency)> = Vec::new();
 
         loop {
             // get line
@@ -39,7 +42,7 @@ impl Parse {
                         return Err("Reached EOF unexpectedly");
                     }
                 }
-                Err => return Err("File read error"),
+                Err(_) => return Err("File read error"),
             };
 
             // empty string denotes the end of a sentence
@@ -65,12 +68,12 @@ impl Parse {
             let token: Token = Token {
                 surface: String::from(line[1]),
                 children: Vec::new(),
-                idx: line[0].unwrap().parse::<u64>(),
+                idx: Some(line[0].parse::<usize>().expect("Invalid token index")),
             };
 
             tokens.push(token);
             deps.push((
-                line[6].unwrap().parse::<u64>()?,
+                line[6].parse::<usize>().expect("Invalid head index"),
                 Dependency {
                     name: String::from(line[7]),
                 },
@@ -86,7 +89,7 @@ impl Parse {
         match root {
             Some(r) => {
                 if !tokens.is_empty() {
-                    Ok(Parse { tokens, r })
+                    Ok(Parse { tokens, root: r })
                 } else {
                     Err("Parse is empty")
                 }
@@ -94,10 +97,12 @@ impl Parse {
             None => Err("Parse has no root"),
         }
     }
-    fn get_parent(&self, child: Token) -> Option<Token> {
+    fn get_parent(&self, child: Token) -> Option<&Token> {
         for token in &self.tokens {
-            if token.children.contains(child) {
-                return Some(token);
+            for s_child in &token.children {
+                if *(s_child.0) == child {
+                    return Some(&token);
+                }
             }
         }
 
