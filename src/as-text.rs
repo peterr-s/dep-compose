@@ -12,6 +12,7 @@ fn main() {
         }
 
         if line.trim().is_empty() {
+            println!("");
             continue;
         }
         
