@@ -90,14 +90,23 @@ y = tf.placeholder(dtype = tf.float32, shape = [sent_embedding_dim, batch_size],
 # this no longer needs to be recursive if we only do bigrams, but any more and it does
 # the new idiomatic way to do this is with the Keras Functional API
 def compose_embedding(word) :
-    tail_layer = tf.keras.layers.concatenate([
-            tf.keras.layers.concatenate([
-                compose_embedding(child),
-                dep_embedding_layer(dep_to_idx[child.reln])
-                ])
-            for child in word.children
-            ]) if len(word.children) > 0 else word_embedding_layer(word_to_idx[word.surface])
-    return tf.keras.layers.Dense(sent_embedding_dim)(tail_layer)
+    return tf.keras.layers.concatenate(
+            [
+                tf.keras.layers.Conv1D(
+                    filters = 1,
+                    kernel_size = embed_dim,
+                    data_format = "channels_first"
+                    )(tf.keras.layers.concatenate(
+                        [
+                            compose_embedding(child),
+                            dep_embedding_layer(dep_to_idx[child.reln])
+                        ],
+                        axis = 1
+                        )
+                    ) for child in word.children
+            ]
+        ) if len(word.children) > 0
+        else word_embedding_layer(word_to_idx[word.surface])
 
 if __name__ == "__main__" :
     sess = tf.Session()
