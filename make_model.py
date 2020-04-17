@@ -5,6 +5,7 @@ import tensorflow as tf
 import numpy as np
 from gensim.models import KeyedVectors
 from gensim.test.utils import datapath
+from config import DefaultConfig
 
 class Word :
     def __init__(self, line) :
@@ -26,18 +27,14 @@ def n(n_str) :
     return float(n_str)
 
 # read hyperparameters from file
-hparams = dict()
-with open("./hyperparams.conf", "r") as hyperparameter_file :
-    for line in hyperparameter_file.readlines() :
-        fields = line.strip().split()
-        if len(fields) > 1 :
-            hparams[fields[0]] = n(fields[1])
-sent_embedding_dim = hparams["sent_embedding_dim"]
-hidden_size = hparams["hidden_size"]
-learning_rate = hparams["learning_rate"]
-epoch_ct = hparams["epoch_ct"]
-sigmoid_cutoff = hparams["sigmoid_cutoff"]
-dep_embedding_dim = hparams["dep_embedding_dim"]
+config = DefaultConfig()
+
+sent_embedding_dim = config.sent_embedding_dim
+hidden_size = config.hidden_size
+learning_rate = config.learning_rate
+epoch_ct = config.epoch_ct
+sigmoid_cutoff = config.sigmoid_cutoff
+dep_embedding_dim = config.dep_embedding_dim
 
 # load embeddings
 embeddings = KeyedVectors.load_word2vec_format(sys.argv[3], binary = False)
