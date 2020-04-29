@@ -1,6 +1,6 @@
 # dep-compose
 
-This is a further development of a project that started as a class assignment. In it, I attempt to train a recursive neural net to compose phrase or sentence embeddings. Because it is now a personal project and I don't have to use Python, I will be rewriting large parts of it in Rust.
+This is a further development of a project that started as a class assignment. In it, I attempt to train a recursive neural net to compose phrase or sentence embeddings.
 
 ### Approach
 
@@ -14,6 +14,7 @@ Part of the reason that the old version used word2vec in particular was that it 
 
 ### Structure
 
-One key difference between the two projects of which this one is a continuation, and between it and both of them, is where the graph generation and training are done. In the first project, because the networks were more or less feed-forward, the graph could easily be built in Python, saved, imported in the Rust program, and trained. In the second, due to project constraints, there was no Rust component anyway. Here, the idea was initially to do the graph generation in Python and the training in Rust, as with the first. However, this is clearly not possible since the graph needs to be defined in terms of each individual input.
+One key difference between the two projects of which this one is a continuation, and between it and both of them, is where the graph generation and training are done. In the first project, because the networks were more or less feed-forward, the graph could easily be built in Python, saved, imported in the Rust program, and trained. In the second, due to project constraints, there was no Rust component anyway. Here, the idea was initially to do the graph generation in Python and the training in Rust, as with the first. However, this is not easily doable since the graph needs to be defined in terms of each individual input.
 
-Luckily, the Rust Tensorflow API has had features added since the time of the first project. Key among these is the ability to define graphs from within Rust, though the way in which this is done is very different from the Python counterpart, especially now with the advent of Tensorflow 2/Keras.
+Unfortunately, due to restraints on how the Tensorflow 2/Keras library works, even the Keras Functional API is not suitable for dynamic graphs. Therefore this entire project is being scrapped and rewritten to use CMU's DyNet.
+
