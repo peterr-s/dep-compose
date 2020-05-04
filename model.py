@@ -29,7 +29,19 @@ parse_test = pyconll.load_from_file(sys.argv[2])
 # define model parameters
 model = dynet.ParameterCollection()
 
+# find all possible dependency types
+dep_types = set()
+for parse in parse_train :
+    for word in parse :
+        dep_types.add(word.deprel)
+for parse in parse_test :
+    for word in parse :
+        dep_types.add(word.deprel)
+
 # define a layer for each possible dependency
+dep_layers = dict()
+for dep_type in dep_types :
+    dep_layers[dep_type] = model.add_parameters((config.sent_dim, 2 * word_dim))
 
 # define graph building operation
 def generate_graph(parse) :
