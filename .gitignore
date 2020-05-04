@@ -2,4 +2,7 @@
 /virtualenv
 /src
 Cargo.*
+__pycache__/
+eigen/
+dynet/
 
