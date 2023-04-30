@@ -2,6 +2,12 @@ from dataclasses import dataclass
 
 import torch
 
+def generate_mask(dep_heads: torch.LongTensor,
+        embedding_dim: int) :
+    return torch.Tensor([1]).to(torch.bool).expand(*dep_heads.shape,
+            dep_heads.shape[-1],
+            embedding_dim).to(torch.bool)
+
 @dataclass
 class DependencyEncoding :
     types: torch.LongTensor
@@ -12,30 +18,70 @@ class CompositionBlock(torch.nn.Module) :
             token_embedding_dim: int,
             dep_embedding_dim: int,
             dep_transformed_dim: int,
+            seq_len: int,
             dtype: torch.dtype = torch.float16) :
         super().__init__()
+        self.seq_len = seq_len
         
         self.dep_transform = torch.nn.Bilinear(token_embedding_dim,
                 dep_embedding_dim,
                 dep_transformed_dim,
                 dtype = dtype)
         self.dep_activation = torch.nn.Tanh()
+
         self.composition_transform = torch.nn.Bilinear(token_embedding_dim,
                 dep_transformed_dim,
                 token_embedding_dim,
                 dtype = dtype)
         self.composition_activation = torch.nn.Tanh()
 
+        self.reduction_transform = torch.nn.Linear(self.seq_len, 1)
+        self.reduction_activation = torch.nn.Tanh()
+
     def forward(self,
             token_embeddings: torch.HalfTensor,
             dep_embeddings: torch.HalfTensor,
             dep_heads: torch.LongTensor) :
+
+        # assert that we have an appropriate input shape (seq_len is respected)
+        assert(token_embeddings.shape[1] == self.seq_len)
+        assert(dep_embeddings.shape[1] == self.seq_len)
+        assert(dep_heads.shape[1] == self.seq_len)
+
+        # transform each embedding according to its dependency type relative to its head
         token_dep_embeddings = self.dep_transform(token_embeddings, dep_embeddings)
         token_dep_embeddings = self.dep_activation(token_embeddings)
 
+        # broadcast dependency-transformed embedding
+        # [batch_sz, seq_len, embedding_dim] -> [batch_sz, seq_len, seq_len, embedding_dim]
+        # we want to relate (optionally) each token to each other token within a sample
+        # this tensor is cloned so that the masking can be performed (else repeats are not stored separately)
+        token_dep_embeddings = token_dep_embeddings.expand(self.seq_len,
+                *token_dep_embeddings.shape).transpose(0, 1).clone()
+        
+        # create dependency mask so that each token is only going to be influenced by its children
+        token_dep_mask = generate_mask(dep_heads, token_embeddings.shape[-1])
+        token_dep_embeddings *= token_dep_mask
+
+        # broadcast unchanged token embeddings for shape compatibility
+        token_embeddings = token_embeddings.expand(self.seq_len,
+                *token_embeddings.shape).transpose(0, 1)
+
+        # compose each token with each of its children
+        # at the end we reshape to prep for next step
+        # [batch_sz, seq_len, seq_len, embedding_dim]
+        # -> [batch_sz, seq_len, embedding_dim, seq_len]
         token_embeddings = self.composition_transform(token_embeddings,
                 token_dep_embeddings)
         token_embeddings = self.composition_activation(token_embeddings)
+        token_embeddings = token_embeddings.transpose(2, 3)
+
+        # transform/pool down transforms of all children into single new embedding for each head
+        # [batch_sz, seq_len, embedding_dim, seq_len]
+        # -> [batch_sz, seq_len, embedding_dim, 1]
+        # -> [batch_sz, seq_len, embedding_dim]
+        token_embeddings = self.reduction_transform(token_embeddings)
+        token_embeddings = token_embeddings.squeeze(3)
 
         return token_embeddings
 
@@ -46,6 +92,7 @@ class Composer(torch.nn.Module) :
             dep_embedding_dim: int,
             dep_embedding_ct: int,
             dep_transformed_dim: int,
+            seq_len: int,
             depth: int,
             dtype: torch.dtype = torch.float16) :
         super().__init__()
@@ -61,6 +108,7 @@ class Composer(torch.nn.Module) :
         self.composition_block = CompositionBlock(token_embedding_dim,
                 dep_embedding_dim,
                 dep_transformed_dim,
+                seq_len,
                 dtype = dtype)
 
     def forward(self,
