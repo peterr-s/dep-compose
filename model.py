@@ -1,72 +1,58 @@
-#!/usr/bin/env python
+import torch
+import transformers
 
-import dynet
-import pyconll
-from gensim.models import KeyedVectors
+class DependencyEncoding :
+    def __init__(self, types, heads) :
+        self.types = types
+        self.heads = heads
 
-import numpy as np
+class CompositionBlock(torch.nn.Module) :
+    def __init__(token_embedding_dim,
+            dep_embedding_dim,
+            dep_transformed_dim) :
+        super().__init__()
+        
+        self.dep_transform = torch.nn.Bilinear(token_embedding_dim,
+                dep_embedding_dim,
+                dep_transformed_dim)
+        self.composition_transform = torch.nn.Bilinear(token_embedding_dim,
+                dep_transformed_dim,
+                token_embedding_dim)
 
-import sys
-from config import DefaultConfig
+    def forward(self, token_embeddings, dep_embeddings, dep_heads) :
+        token_dep_embeddings = self.dep_transform(token_embeddings, dep_embeddings)
+        token_dep_embeddings = torch.nn.Tanh(token_embeddings)
 
-# usage: model.py train test embeddings
-if len(sys.argv) < 4 :
-    print("usage: %s train test embeddings" % sys.argv[0], file = sys.stderr)
-    exit(1)
+        token_embeddings = self.composition_transform(token_embeddings,
+                token_dep_embeddings)
+        token_embeddings = torch.nn.Tanh(token_embeddings)
 
-# load config from file
-config = DefaultConfig()
+        return token_embeddings
 
-# load parses
-parse_train = pyconll.load_from_file(sys.argv[1])
-parse_test = pyconll.load_from_file(sys.argv[2])
+class Composer(transformers.PreTrainedModel) :
+    def __init__(token_embedding_dim,
+            token_embedding_ct,
+            dep_embedding_dim,
+            dep_embedding_ct,
+            depth) :
+        super().__init__()
+        self.depth = depth
 
-# define model parameters
-model = dynet.ParameterCollection()
+        self.token_embedding_layer = torch.nn.Embedding(token_embedding_ct,
+                token_embedding_dim)
+        self.dep_embedding_layer = torch.nn.Embedding(dep_embedding_ct,
+                dep_embedding_dim)
 
-# find all possible dependency types
-dep_types = set()
-for parse in parse_train :
-    for word in parse :
-        dep_types.add(word.deprel)
-for parse in parse_test :
-    for word in parse :
-        dep_types.add(word.deprel)
+        self.composition_block = CompositionBlock(token_embedding_dim,
+                dep_embedding_dim)
 
-# load embedding model
-embeddings = KeyedVectors.load_word2vec_format(sys.argv[3], binary = True)
-word_dim = embeddings.vector_size
-null_word = np.zeros(word_dim)
+    def forward(self, tokens, deps) :
+        token_embeddings = self.token_embedding_layer(tokens)
+        dep_embeddings = self.dep_embedding_layer(deps.types)
 
-# define a layer for each possible dependency
-dep_layers = dict()
-for dep_type in dep_types :
-    dep_layers[dep_type] = model.add_parameters((config.sent_dim, 2 * config.sent_dim))
+        for _ in range(self.depth) :
+            token_embeddings = self.composition_block(token_embeddings,
+                    dep_embeddings,
+                    deps.heads)
 
-# define trainable projection layer from word dim to phrase dim
-# this simplifies concatenation and allows us to treat the recursive base case as a phrase of its own
-word_to_phrase_projection = model.add_parameters((config.sent_dim, word_dim))
-
-# define graph building operation
-def generate_graph(parse) :
-    parse_graph = parse.to_tree()
-    return graph_gen_helper(parse_graph)
-
-def graph_gen_helper(node) :
-    node_value = word_to_phrase_projection * embeddings[node.data.form]
-
-    for child in node :
-        child_subtree = graph_gen_helper(child)
-
-        # concatenate the node so far with the subtree, select layer according to dep reln
-        node_value = dep_layers[child.data.deprel] * dynet.concatenate([node_value, child_subtree])
-
-    return node_value
-
-# run training
-for parse, y_pred in zip(parse_train, y_preds) :
-    y_pred = generate_graph(parse)
-    loss = dynet.l1_distance(dynet.l2_norm(y_pred), dynet.l2_norm(y))
-
-# run eval
-
+        return token_embeddings
