@@ -1,12 +1,23 @@
 from dataclasses import dataclass
 
 import torch
+import numpy as np
 
 def generate_mask(dep_heads: torch.LongTensor,
         embedding_dim: int) :
-    return torch.Tensor([1]).to(torch.bool).expand(*dep_heads.shape,
-            dep_heads.shape[-1],
-            embedding_dim).to(torch.bool)
+    # populate rank-3 mask of tokens to whether each other token is their child
+    # [batch_sz, seq_len, seq_len]
+    dep_mask = np.zeros((*dep_heads.shape, dep_heads.shape[-1]), dtype = bool)
+    for i, sample in enumerate(dep_heads) :
+        for j, head in enumerate(sample) :
+            dep_mask[i, head, j] = True
+
+    # copy across embedding axis to allow multiplication
+    dep_mask = np.tile(
+            np.expand_dims(dep_mask, len(dep_mask.shape)),
+            embedding_dim)
+
+    return torch.Tensor(dep_mask)
 
 @dataclass
 class DependencyEncoding :
@@ -76,7 +87,7 @@ class CompositionBlock(torch.nn.Module) :
         token_embeddings = self.composition_activation(token_embeddings)
         token_embeddings = token_embeddings.transpose(2, 3)
 
-        # transform/pool down transforms of all children into single new embedding for each head
+        # transform/pool down transforms of all children into single new embedding for each token
         # [batch_sz, seq_len, embedding_dim, seq_len]
         # -> [batch_sz, seq_len, embedding_dim, 1]
         # -> [batch_sz, seq_len, embedding_dim]
