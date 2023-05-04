@@ -3,7 +3,7 @@
 import torch
 from transformers import AutoTokenizer
 
-from model import Composer, DependencyEncoding
+from composer.model import Composer, DependencyEncoding
 
 t = AutoTokenizer.from_pretrained("distilgpt2")
 tok = t("this is a test", return_tensors = "pt")
