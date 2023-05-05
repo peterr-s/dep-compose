@@ -1,5 +1,6 @@
 import os
 
+import conllu
 from gensim.corpora.textcorpus import TextCorpus
 
 CONLL_EXTENSIONS = {".conll", ".conllu", ".conllx"}
@@ -18,22 +19,5 @@ class CONLLCorpus(TextCorpus) :
 
         for path in paths :
             with open(path) as input_file :
-                sentence = list()
-                for line in input_file :
-                    line = line.strip()
-
-                    if not line :
-                        if sentence :
-                            yield sentence
-                            sentence = list()
-                            continue
-                        else :
-                            continue
-                    if line.startswith("#") :
-                        continue
-
-                    fields = line.split("\t")
-                    sentence.append(fields[1])
-
-                if sentence :
-                    yield sentence
+                for sentence in conllu.parse_incr(input_file) :
+                    yield [token.get("form") for token in sentence]
