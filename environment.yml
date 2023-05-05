@@ -9,3 +9,6 @@ dependencies:
   - torchaudio
   - transformers
   - gensim
+  - pip
+  - pip:
+    - git+https://github.com/peterr-s/conllu.git@tree-to-list
