@@ -1,9 +1,7 @@
-import os
-
 import conllu
 from gensim.corpora.textcorpus import TextCorpus
 
-CONLL_EXTENSIONS = {".conll", ".conllu", ".conllx"}
+from composer.utils import get_conll_file_paths
 
 class CONLLCorpus(TextCorpus) :
     def __init__(self, input = None) :
@@ -12,10 +10,7 @@ class CONLLCorpus(TextCorpus) :
         self.input = input
 
     def get_texts(self) :
-        paths = [os.path.join(directory, filename)
-                for directory, _, files in os.walk(self.input)
-                for filename in files
-                if os.path.splitext(filename)[1] in CONLL_EXTENSIONS]
+        paths = get_conll_file_paths(self.input)
 
         for path in paths :
             with open(path) as input_file :

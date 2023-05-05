@@ -1,19 +1,10 @@
 #!/usr/bin/env python3
 
 import sys
-from typing import List
 
 import conllu
 
-NP_DEPRELS = {"nsubj", "obj", "iobj", "obl", "vocative", "expl", "dislocated", "nmod", "appos", "nummod"}
-
-def find_nps_in_tree(tree: conllu.models.TokenTree) -> List[conllu.models.TokenTree] :
-    nps = [tree] if tree.token.get("deprel") in NP_DEPRELS else list()
-
-    for child in tree.children :
-        nps.extend(find_nps_in_tree(child))
-
-    return nps
+from composer.utils import find_nps_in_tree
 
 def main() :
     for tree in conllu.parse_tree_incr(sys.stdin) :
