@@ -133,4 +133,8 @@ class Composer(torch.nn.Module) :
                     dep_embeddings,
                     deps.heads)
 
+        output_mask = (deps.heads == 0).expand(
+                (token_embeddings.shape[-1], *deps.heads.shape)).permute((1, 2, 0))
+        token_embeddings *= output_mask
+
         return token_embeddings
