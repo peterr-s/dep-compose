@@ -138,3 +138,20 @@ class Composer(torch.nn.Module) :
         token_embeddings *= output_mask
 
         return token_embeddings
+
+    def pad_inputs(self,
+            tokens: Optional[torch.LongTensor] = None,
+            deps: Optional[torch.LongTensor] = None,
+            heads: Optional[torch.LongTensor] = None) -> Tuple[Optional[torch.LongTensor]] :
+        return (torch.cat((tokens,
+                        torch.zeros((tokens.shape[0], self.composition_block.seq_len - tokens.shape[1]),
+                            dtype = torch.long)),
+                    axis = 1) if tokens is not None else None,
+                torch.cat((deps,
+                        torch.zeros((deps.shape[0], self.composition_block.seq_len - deps.shape[1]),
+                            dtype = torch.long)),
+                    axis = 1) if tokens is not None else None,
+                torch.cat((heads,
+                        torch.zeros((heads.shape[0], self.composition_block.seq_len - heads.shape[1]),
+                            dtype = torch.long)),
+                    axis = 1) if tokens is not None else None)
