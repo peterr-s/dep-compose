@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import torch
 import numpy as np
@@ -139,19 +140,16 @@ class Composer(torch.nn.Module) :
 
         return token_embeddings
 
+    def pad_input(self, tensor: torch.LongTensor) -> torch.LongTensor :
+        return torch.cat((tensor,
+                        torch.zeros((tensor.shape[0], self.composition_block.seq_len - tensor.shape[1]),
+                            dtype = torch.long)),
+                    axis = 1)
+
     def pad_inputs(self,
             tokens: Optional[torch.LongTensor] = None,
             deps: Optional[torch.LongTensor] = None,
             heads: Optional[torch.LongTensor] = None) -> Tuple[Optional[torch.LongTensor]] :
-        return (torch.cat((tokens,
-                        torch.zeros((tokens.shape[0], self.composition_block.seq_len - tokens.shape[1]),
-                            dtype = torch.long)),
-                    axis = 1) if tokens is not None else None,
-                torch.cat((deps,
-                        torch.zeros((deps.shape[0], self.composition_block.seq_len - deps.shape[1]),
-                            dtype = torch.long)),
-                    axis = 1) if tokens is not None else None,
-                torch.cat((heads,
-                        torch.zeros((heads.shape[0], self.composition_block.seq_len - heads.shape[1]),
-                            dtype = torch.long)),
-                    axis = 1) if tokens is not None else None)
+        return (self.pad_input(tokens) if tokens is not None else None,
+                self.pad_input(deps) if deps is not None else None,
+                self.pad_input(heads) if heads is not None else None)
