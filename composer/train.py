@@ -20,7 +20,8 @@ def main(corpus_path: str,
         token_embedding_dim: int,
         seq_len: int,
         epochs: int,
-        batch_sz: int) :
+        batch_sz: int,
+        dep_type_ct: int) :
     log.info("training embedding model")
     corpus = CONLLCorpus(corpus_path)
     word_embeddings = Word2Vec(list(corpus.get_texts()),
@@ -29,11 +30,11 @@ def main(corpus_path: str,
     log.info("setting up composer")
     composer = Composer(token_embedding_dim,
             15000,
-            300,
-            20,
+            2000,
+            dep_type_ct,
             token_embedding_dim,
             seq_len,
-            2,
+            3,
             dtype = torch.float)
     log.debug(f"set up {composer=}")
     composer.token_embedding_layer = torch.nn.Embedding.from_pretrained(
@@ -112,6 +113,10 @@ if __name__ == "__main__" :
             help = "embedding dimensionality for tokens and output",
             type = int,
             default = 300)
+    parser.add_argument("--dep-type-ct",
+            help = "number of dependency types for which to train transforms",
+            type = int,
+            default = 52)
     parser.add_argument("--seq-len",
             help = "maximum input sequence length",
             type = int,
