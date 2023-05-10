@@ -19,34 +19,55 @@ def main(corpus_path: str,
         train_path: str,
         token_embedding_dim: int,
         seq_len: int,
-        epochs: int) :
+        epochs: int,
+        batch_sz: int) :
+    log.info("training embedding model")
     corpus = CONLLCorpus(corpus_path)
     word_embeddings = Word2Vec(list(corpus.get_texts()),
             vector_size = token_embedding_dim)
 
+    log.info("setting up composer")
     composer = Composer(token_embedding_dim,
-            6000,
-            500,
+            15000,
+            300,
             20,
-            500,
+            token_embedding_dim,
             seq_len,
-            3,
+            2,
             dtype = torch.float)
+    log.debug(f"set up {composer=}")
     composer.token_embedding_layer = torch.nn.Embedding.from_pretrained(
             torch.Tensor(word_embeddings.wv.vectors))
+    log.debug(f"replaced embedding layer; {composer=}")
+    log.info(f"model has {sum(p.numel() for p in composer.parameters())} params")
 
-    dataset = ComposerCONLLIterableDataset([train_path],
-            word_embeddings.wv.get_index,
-            word_embeddings.wv.has_index_for)
-    dataloader = torch.utils.data.DataLoader(dataset)
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    composer.to(device)
+    composer.token_embedding_layer.to(device)
+    log.info(f"moved model to {device}")
 
     loss_fn = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(composer.parameters(), lr = 0.001)
 
-    for epoch in range(epochs) :
-        for batch in dataloader :
-            input_ids, dep_ids, head_idcs = composer.pad_inputs(*batch[:3])
-            label_ids = batch[3]
+    log.info("loading composer training data")
+    dataset = ComposerCONLLIterableDataset([train_path],
+            word_embeddings.wv.get_index,
+            word_embeddings.wv.has_index_for,
+            composer.pad_inputs)
+    dataloader = torch.utils.data.DataLoader(dataset,
+            batch_size = batch_sz)
+
+    log.info(f"starting training run, {epochs=}")
+    for epoch_no in range(epochs) :
+        loss_total = 0
+        batch_ct = 0
+        for batch_no, batch in enumerate(dataloader) :
+            input_ids, dep_ids, head_idcs, label_ids = batch
+            label_ids = label_ids.squeeze(1)
+            input_ids = input_ids.to(device)
+            dep_ids = dep_ids.to(device)
+            head_idcs = head_idcs.to(device)
+            label_ids = label_ids.to(device)
 
             deps = DependencyEncoding(dep_ids, head_idcs)
 
@@ -59,9 +80,17 @@ def main(corpus_path: str,
             preds = composer(input_ids, deps)
 
             loss = loss_fn(preds, targets)
-            print(f"batch loss %f" % loss.item())
             loss.backward()
             optimizer.step()
+
+            loss_total += loss.item()
+            if not batch_no % 20 :
+                loss_avg = loss_total / (batch_no + 1)
+                log.info(f"{epoch_no=} {batch_no=} {loss_avg=}")
+            batch_ct = batch_no
+
+        loss_avg = loss_total / batch_ct
+        log.info(f"{epoch_no=} final {loss_avg=}")
 
 if __name__ == "__main__" :
     parser = argparse.ArgumentParser()
@@ -75,10 +104,14 @@ if __name__ == "__main__" :
             help = "number of epochs of training to run",
             type = int,
             default = 1)
+    parser.add_argument("--batch-sz",
+            help = "batch size to use in training",
+            type = int,
+            default = 5)
     parser.add_argument("--token-embedding-dim",
             help = "embedding dimensionality for tokens and output",
             type = int,
-            default = 500)
+            default = 300)
     parser.add_argument("--seq-len",
             help = "maximum input sequence length",
             type = int,

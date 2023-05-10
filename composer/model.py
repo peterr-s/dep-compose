@@ -72,7 +72,7 @@ class CompositionBlock(torch.nn.Module) :
                 *token_dep_embeddings.shape).transpose(0, 1).clone()
         
         # create dependency mask so that each token is only going to be influenced by its children
-        token_dep_mask = generate_mask(dep_heads, token_embeddings.shape[-1])
+        token_dep_mask = generate_mask(dep_heads, token_embeddings.shape[-1]).to(self.device())
         token_dep_embeddings *= token_dep_mask
 
         # broadcast unchanged token embeddings for shape compatibility
@@ -96,6 +96,9 @@ class CompositionBlock(torch.nn.Module) :
         token_embeddings = token_embeddings.squeeze(3)
 
         return token_embeddings
+
+    def device(self) :
+        return next(self.parameters()).device
 
 class Composer(torch.nn.Module) :
     def __init__(self,
@@ -135,16 +138,18 @@ class Composer(torch.nn.Module) :
                     deps.heads)
 
         output_mask = (deps.heads == 0).expand(
-                (token_embeddings.shape[-1], *deps.heads.shape)).permute((1, 2, 0))
+                (token_embeddings.shape[-1], *deps.heads.shape)).permute((1, 2, 0)).to(self.device())
         token_embeddings *= output_mask
 
         return token_embeddings
 
+    def device(self) :
+        return next(self.parameters()).device
+
     def pad_input(self, tensor: torch.LongTensor) -> torch.LongTensor :
         return torch.cat((tensor,
-                        torch.zeros((tensor.shape[0], self.composition_block.seq_len - tensor.shape[1]),
-                            dtype = torch.long)),
-                    axis = 1)
+                        torch.zeros(self.composition_block.seq_len - tensor.shape[0],
+                            dtype = torch.long)))
 
     def pad_inputs(self,
             tokens: Optional[torch.LongTensor] = None,

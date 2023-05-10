@@ -9,10 +9,12 @@ class ComposerCONLLIterableDataset(torch.utils.data.IterableDataset) :
     def __init__(self,
             paths,
             token_id_getter,
-            token_presence_checker) :
+            token_presence_checker,
+            pad_fn) :
         self.paths = paths
         self.token_id_getter = token_id_getter
         self.token_presence_checker = token_presence_checker
+        self.pad_fn = pad_fn
         self._dep_to_id = dict()
         self._id_to_dep = list()
 
@@ -45,4 +47,4 @@ class ComposerCONLLIterableDataset(torch.utils.data.IterableDataset) :
                         head_idcs = torch.LongTensor([id_to_idx.get(token.get("head"), 0)
                                 for token in token_list])
 
-                        yield input_ids, dep_ids, head_idcs, output_id
+                        yield *self.pad_fn(input_ids, dep_ids, head_idcs), output_id
