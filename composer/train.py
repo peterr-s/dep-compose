@@ -17,10 +17,12 @@ configure_logging()
 
 def main(corpus_path: str,
         train_path: str,
+        val_path: str,
         token_embedding_dim: int,
         seq_len: int,
         epochs: int,
         batch_sz: int,
+        val_batch_sz: int,
         dep_type_ct: int) :
     log.info("training embedding model")
     corpus = CONLLCorpus(corpus_path)
@@ -47,59 +49,90 @@ def main(corpus_path: str,
     composer.token_embedding_layer.to(device)
     log.info(f"moved model to {device}")
 
-    loss_fn = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(composer.parameters(), lr = 0.001)
+    loss_fn = torch.nn.CosineEmbeddingLoss()
+    optimizer = torch.optim.Adam(composer.parameters(), lr = 0.001)
 
     log.info("loading composer training data")
-    dataset = ComposerCONLLIterableDataset([train_path],
+    dataset = ComposerCONLLIterableDataset(get_conll_file_paths(train_path),
             word_embeddings.wv.get_index,
             word_embeddings.wv.has_index_for,
             composer.pad_inputs)
     dataloader = torch.utils.data.DataLoader(dataset,
             batch_size = batch_sz)
+    
+    dataset_val = ComposerCONLLIterableDataset(get_conll_file_paths(val_path),
+            word_embeddings.wv.get_index,
+            word_embeddings.wv.has_index_for,
+            composer.pad_inputs)
+    dataloader_val = torch.utils.data.DataLoader(dataset_val,
+            batch_size = val_batch_sz)
 
     log.info(f"starting training run, {epochs=}")
     for epoch_no in range(epochs) :
         loss_total = 0
         batch_ct = 0
+        iterator_val = iter(dataloader_val)
         for batch_no, batch in enumerate(dataloader) :
             input_ids, dep_ids, head_idcs, label_ids = batch
             label_ids = label_ids.squeeze(1)
+
             input_ids = input_ids.to(device)
             dep_ids = dep_ids.to(device)
             head_idcs = head_idcs.to(device)
             label_ids = label_ids.to(device)
 
             deps = DependencyEncoding(dep_ids, head_idcs)
-
             targets = composer.token_embedding_layer(label_ids)
-            targets = targets.expand((seq_len, -1, -1)).transpose(0, 1).clone()
-            target_mask = (head_idcs == 0).expand(
-                    (token_embedding_dim, *head_idcs.shape)).permute((1, 2, 0))
-            targets *= target_mask
 
             preds = composer(input_ids, deps)
+            preds = torch.sum(preds, dim = 1)
 
-            loss = loss_fn(preds, targets)
+            loss = loss_fn(preds, targets, torch.ones(batch_sz, device = device))
             loss.backward()
             optimizer.step()
 
             loss_total += loss.item()
             if not batch_no % 20 :
-                loss_avg = loss_total / (batch_no + 1)
-                log.info(f"{epoch_no=} {batch_no=} {loss_avg=}")
+                batch_val = next(iterator_val, None)
+                if not batch_val :
+                    iterator_val = iter(dataloader_val)
+                    batch_val = next(iterator_val)
+
+                input_ids, dep_ids, head_idcs, label_ids = batch_val
+                label_ids = label_ids.squeeze(1)
+
+                input_ids = input_ids.to(device)
+                dep_ids = dep_ids.to(device)
+                head_idcs = head_idcs.to(device)
+                label_ids = label_ids.to(device)
+
+                deps = DependencyEncoding(dep_ids, head_idcs)
+                targets = composer.token_embedding_layer(label_ids)
+
+                preds = composer(input_ids, deps)
+                preds = torch.sum(preds, dim = 1)
+
+                loss_val = loss_fn(preds, targets, torch.ones(batch_sz, device = device)).item()
+
+                loss_avg = loss_total / min(batch_no + 1, 20)
+                log.info(f"{epoch_no=}\t{batch_no=}\t{loss_avg=}\t{loss_val=}")
+                loss_total = 0
+
             batch_ct = batch_no
 
-        loss_avg = loss_total / batch_ct
+        loss_avg = loss_total / ((batch_ct % 20) + 1)
         log.info(f"{epoch_no=} final {loss_avg=}")
 
 if __name__ == "__main__" :
     parser = argparse.ArgumentParser()
     parser.add_argument("--corpus-path",
-            help = "path to directory with CONLL files for training",
+            help = "path to directory with CONLL files for embedding training",
             required = True)
     parser.add_argument("--train-path",
-            help = "path to the file with a list of phrases to approximate",
+            help = "path to directory with a list of phrases to approximate",
+            required = True)
+    parser.add_argument("--val-path",
+            help = "path to directory with a list of phrases to validate on",
             required = True)
     parser.add_argument("--epochs",
             help = "number of epochs of training to run",
@@ -109,6 +142,10 @@ if __name__ == "__main__" :
             help = "batch size to use in training",
             type = int,
             default = 5)
+    parser.add_argument("--val-batch-sz",
+            help = "batch size to use for validation",
+            type = int,
+            default = 20)
     parser.add_argument("--token-embedding-dim",
             help = "embedding dimensionality for tokens and output",
             type = int,
