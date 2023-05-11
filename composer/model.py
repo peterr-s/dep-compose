@@ -146,6 +146,17 @@ class Composer(torch.nn.Module) :
     def device(self) :
         return next(self.parameters()).device
 
+    def truncate_input(self, tensor: torch.LongTensor) -> torch.LongTensor :
+        return tensor[:self.composition_block.seq_len]
+
+    def truncate_inputs(self,
+            tokens: Optional[torch.LongTensor] = None,
+            deps: Optional[torch.LongTensor] = None,
+            heads: Optional[torch.LongTensor] = None) -> Tuple[Optional[torch.LongTensor]] :
+        return (self.truncate_input(tokens) if tokens is not None else None,
+                self.truncate_input(deps) if deps is not None else None,
+                self.truncate_input(heads) if heads is not None else None)
+
     def pad_input(self, tensor: torch.LongTensor) -> torch.LongTensor :
         return torch.cat((tensor,
                         torch.zeros(self.composition_block.seq_len - tensor.shape[0],
@@ -155,6 +166,7 @@ class Composer(torch.nn.Module) :
             tokens: Optional[torch.LongTensor] = None,
             deps: Optional[torch.LongTensor] = None,
             heads: Optional[torch.LongTensor] = None) -> Tuple[Optional[torch.LongTensor]] :
+        tokens, deps, heads = self.truncate_inputs(tokens, deps, heads)
         return (self.pad_input(tokens) if tokens is not None else None,
                 self.pad_input(deps) if deps is not None else None,
                 self.pad_input(heads) if heads is not None else None)
