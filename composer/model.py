@@ -5,20 +5,21 @@ import torch
 import numpy as np
 
 def generate_mask(dep_heads: torch.LongTensor,
-        embedding_dim: int) :
+        embedding_dim: int) -> torch.BoolTensor :
     # populate rank-3 mask of tokens to whether each other token is their child
     # [batch_sz, seq_len, seq_len]
     dep_mask = np.zeros((*dep_heads.shape, dep_heads.shape[-1]), dtype = bool)
     for i, sample in enumerate(dep_heads) :
         for j, head in enumerate(sample) :
-            dep_mask[i, head, j] = True
+            if head < dep_heads.shape[-1] :
+                dep_mask[i, head, j] = True
 
     # copy across embedding axis to allow multiplication
     dep_mask = np.tile(
             np.expand_dims(dep_mask, len(dep_mask.shape)),
             embedding_dim)
 
-    return torch.Tensor(dep_mask)
+    return torch.BoolTensor(dep_mask)
 
 @dataclass
 class DependencyEncoding :
@@ -34,25 +35,26 @@ class CompositionBlock(torch.nn.Module) :
             dtype: torch.dtype = torch.float16) :
         super().__init__()
         self.seq_len = seq_len
+        self.dtype = dtype
         
         self.dep_transform = torch.nn.Bilinear(token_embedding_dim,
                 dep_embedding_dim,
                 dep_transformed_dim,
-                dtype = dtype)
+                dtype = self.dtype)
         self.dep_activation = torch.nn.Tanh()
 
         self.composition_transform = torch.nn.Bilinear(token_embedding_dim,
                 dep_transformed_dim,
                 token_embedding_dim,
-                dtype = dtype)
+                dtype = self.dtype)
         self.composition_activation = torch.nn.Tanh()
 
-        self.reduction_transform = torch.nn.Linear(self.seq_len, 1)
-        self.reduction_activation = torch.nn.Tanh()
+        self.reduction_transform = torch.nn.Linear(self.seq_len, 1, dtype = self.dtype)
+        self.reduction_activation = torch.nn.Softmax(dim = 1)
 
     def forward(self,
-            token_embeddings: torch.HalfTensor,
-            dep_embeddings: torch.HalfTensor,
+            token_embeddings: torch.Tensor,
+            dep_embeddings: torch.Tensor,
             dep_heads: torch.LongTensor) :
 
         # assert that we have an appropriate input shape (seq_len is respected)
@@ -60,9 +62,14 @@ class CompositionBlock(torch.nn.Module) :
         assert(dep_embeddings.shape[1] == self.seq_len)
         assert(dep_heads.shape[1] == self.seq_len)
 
+        # cast embeddings to correct dtype
+        if token_embeddings.dtype != self.dtype :
+            token_embeddings = token_embeddings.to(self.dtype)
+        if dep_embeddings.dtype != self.dtype :
+            dep_embeddings = dep_embeddings.to(self.dtype)
+
         # transform each embedding according to its dependency type relative to its head
         token_dep_embeddings = self.dep_transform(token_embeddings, dep_embeddings)
-        token_dep_embeddings = self.dep_activation(token_embeddings)
 
         # broadcast dependency-transformed embedding
         # [batch_sz, seq_len, embedding_dim] -> [batch_sz, seq_len, seq_len, embedding_dim]
@@ -73,7 +80,9 @@ class CompositionBlock(torch.nn.Module) :
         
         # create dependency mask so that each token is only going to be influenced by its children
         token_dep_mask = generate_mask(dep_heads, token_embeddings.shape[-1]).to(self.device())
-        token_dep_embeddings *= token_dep_mask
+        token_dep_embeddings = token_dep_embeddings.where(token_dep_mask,
+                torch.zeros(token_dep_embeddings.shape, device = self.device(), dtype = self.dtype))
+        token_dep_embeddings = self.dep_activation(token_dep_embeddings)
 
         # broadcast unchanged token embeddings for shape compatibility
         token_embeddings = token_embeddings.expand(self.seq_len,
@@ -147,7 +156,7 @@ class Composer(torch.nn.Module) :
         return next(self.parameters()).device
 
     def truncate_input(self, tensor: torch.LongTensor) -> torch.LongTensor :
-        return tensor[:self.composition_block.seq_len]
+        return tensor[:self.composition_block.seq_len].clone()
 
     def truncate_inputs(self,
             tokens: Optional[torch.LongTensor] = None,

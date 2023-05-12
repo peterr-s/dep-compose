@@ -27,20 +27,20 @@ def main(corpus_path: str,
     log.info("training embedding model")
     corpus = CONLLCorpus(corpus_path)
     word_embeddings = Word2Vec(list(corpus.get_texts()),
-            vector_size = token_embedding_dim)
+            vector_size = token_embedding_dim,
+            min_count = 3)
 
     log.info("setting up composer")
     composer = Composer(token_embedding_dim,
-            15000,
-            2000,
+            10,
+            6000,
             dep_type_ct,
             token_embedding_dim,
             seq_len,
-            3,
-            dtype = torch.float)
+            2)
     log.debug(f"set up {composer=}")
     composer.token_embedding_layer = torch.nn.Embedding.from_pretrained(
-            torch.Tensor(word_embeddings.wv.vectors))
+            torch.HalfTensor(word_embeddings.wv.vectors))
     log.debug(f"replaced embedding layer; {composer=}")
     log.info(f"model has {sum(p.numel() for p in composer.parameters())} params")
 
@@ -50,7 +50,7 @@ def main(corpus_path: str,
     log.info(f"moved model to {device}")
 
     loss_fn = torch.nn.CosineEmbeddingLoss()
-    optimizer = torch.optim.Adam(composer.parameters(), lr = 0.001)
+    optimizer = torch.optim.Adam(composer.parameters(), lr = 0.001, eps = 1e-05)
 
     log.info("loading composer training data")
     dataset = ComposerCONLLIterableDataset(get_conll_file_paths(train_path),
@@ -65,7 +65,7 @@ def main(corpus_path: str,
             word_embeddings.wv.has_index_for,
             composer.pad_inputs)
     dataloader_val = torch.utils.data.DataLoader(dataset_val,
-            batch_size = val_batch_sz)
+            batch_size = batch_sz)
 
     log.info(f"starting training run, {epochs=}")
     for epoch_no in range(epochs) :
