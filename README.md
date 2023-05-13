@@ -1,12 +1,14 @@
 # dep-compose
-This is a further development of a project that started as a class assignment, which I picked back up and then abandoned for another few years due to having a day job. In it, I attempt to train a recursive neural net to compose phrase or sentence embeddings.
+This is a further development of a project that started as a class assignment, which I picked back up and then abandoned for another few years. In it, I attempt to train a neural net to compose phrase or sentence embeddings along a parse graph.
 
 ## Purpose
 The Transformer is a shining example of the old saying that all models are wrong, but some are useful. Its indisputable success at many natural language tasks and its sudden adoption by the general public for everyday use prove that it can, when used correctly, generate plausible natural language.
 
 However, its approach to generating representations of language is fundamentally flawed. Although the attention mechanism and clever masking tricks can result in approximations of structure and inter-token dependencies, they do not fully capture it.
 
-The goal here is to create a model that is less wrong, in the sense that it explicitly uses structural information to generate its representation of a piece of text. This is not an entirely novel idea ([1](), [2](), [3]()), though certainly in recent years the Transformer has attracted much more attention and investigation.
+The goal here is to create a model that is less wrong (and hopefully at least as useful), in the sense that it explicitly uses structural information to generate its representation of a piece of text. This is not an entirely novel idea (see, for example, [the work that was done at Tübingen's SFB 883 in project A3](https://uni-tuebingen.de/en/research/core-research/collaborative-research-centers/crc-833/research-projects/a3-hinrichs/)), though certainly in recent years the Transformer has attracted much more attention and investigation.
+
+There are at least two reasons to pursue a less wrong model. Firstly, if the model has a strong linguistic underpinning, it will be more explainable. Its behavior will be easier to analyze, allowing for improvements and safeguards to be more readily and confidently designed. Expectations of its behavior may also be easier to set if its weaknesses are easier to trace and pin down. Secondly, if the model can be encouraged through an appropriate architecture to generalize or discriminate across the right axes, it may be possible to achieve good results with less brute force. That is, we may get away with smaller models, which are easier and faster to train and host.
 
 ## Scope
 Both because it is best to start with a proof of concept before sinking resources into a project doomed to fail, and because the compute power currently available to me is a single RTX 2080, the current plan is to expand the scope in the following order:
@@ -29,8 +31,14 @@ In this variation, the key difference is that the target embeddings will be thos
 
 ## Structure
 
-One key difference between the two projects of which this one is a continuation, and between it and both of them, is where the graph generation and training are done. In the first project, because the networks were more or less feed-forward, the graph could easily be built in Python, saved, imported in the Rust program, and trained. In the second, due to project constraints, there was no Rust component anyway. Here, the idea was initially to do the graph generation in Python and the training in Rust, as with the first. However, this is not easily doable since the graph needs to be defined in terms of each individual input.
+~~One key difference between the two projects of which this one is a continuation, and between it and both of them, is where the graph generation and training are done. In the first project, because the networks were more or less feed-forward, the graph could easily be built in Python, saved, imported in the Rust program, and trained. In the second, due to project constraints, there was no Rust component anyway. Here, the idea was initially to do the graph generation in Python and the training in Rust, as with the first. However, this is not easily doable since the graph needs to be defined in terms of each individual input.~~
 
 ~~Unfortunately, due to restraints on how the Tensorflow 2/Keras library works, even the Keras Functional API is not suitable for dynamic graphs. Therefore this entire project is being scrapped and rewritten to use CMU's DyNet.~~
 
-It's funny how wildly the libraries and my ideas around network architecture have changed since last I worked on this. It should be possible to create this functionality without needing a dynamic graph. Let's see...
+It's funny how wildly the libraries and my ideas around network architecture have changed since last I worked on this. This new model is not really recursive. It's better to think of it as kind of recurrent.
+
+We embed the tokens and the dependency relations that they have toward their heads. We also create a matrix where for each token position, we mark which positions its children are in.
+
+Once we have transformed each token according to its head type, we further transform it according to the transformed values of only its children. That is, after each step, each token has been modified first by the role it plays in the phrase, and then by the tokens which act upon it. This is repeated a number of times, hopefully until some influence from each leaf has propagated up to the root.
+
+Although it would be possible to do this in such a way that it would essentially be an unpacked recursive operation (i.e. masking appropriately at each step so as to do only one transform along each dependency edge in each forward pass), this would add complexity. So, in this first step, we will see whether we can avoid that complexity. Also, it is worth noting that this will allow tokens closer to the root to be more thoroughly transformed, as the later changes to ones further away will essentially be ignored. Whether this is useful will also be an interesting question.
