@@ -152,7 +152,7 @@ class Composer(torch.nn.Module) :
 
         return token_embeddings
 
-    def device(self) :
+    def device(self) -> torch.device :
         return next(self.parameters()).device
 
     def truncate_input(self, tensor: torch.LongTensor) -> torch.LongTensor :
