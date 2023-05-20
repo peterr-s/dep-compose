@@ -179,3 +179,23 @@ class Composer(torch.nn.Module) :
         return (self.pad_input(tokens) if tokens is not None else None,
                 self.pad_input(deps) if deps is not None else None,
                 self.pad_input(heads) if heads is not None else None)
+
+class DynamicComposer(Composer) :
+    def forward(self,
+            tokens: torch.LongTensor,
+            layered_deps: List[DependencyEncoding]) :
+        token_embeddings = self.token_embedding_layer(tokens)
+
+        for deps in layered_deps :
+            dep_embeddings = self.dep_embedding_layer(deps.types)
+
+            token_embeddings = self.composition_block(token_embeddings,
+                    dep_embeddings,
+                    deps.heads)
+
+        output_mask = (layered_deps[-1].heads == 0).expand(
+                (token_embeddings.shape[-1], *layered_deps[-1].heads.shape)).permute((1, 2, 0)).to(self.device())
+        token_embeddings *= output_mask
+
+        return token_embeddings
+
