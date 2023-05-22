@@ -1,4 +1,5 @@
 import os
+from typing import Tuple, Generator, Optional, List
 
 import conllu
 import torch
@@ -18,7 +19,7 @@ class CONLLIterableDatasetBase(torch.utils.data.IterableDataset) :
         self._dep_to_id = dict()
         self._id_to_dep = list()
 
-    def __iter__(self) :
+    def __iter__(self) -> Generator[Tuple, None, None] :
         for path in self.paths :
             with open(path) as input_file :
                 for sentence in conllu.parse_incr(input_file) :
@@ -38,7 +39,10 @@ class CONLLIterableDatasetBase(torch.utils.data.IterableDataset) :
         raise NotImplementedError()
 
 class ComposerCONLLIterableDataset(CONLLIterableDatasetBase) :
-    def create_sample(self, np) :
+    def create_sample(self, np) -> Tuple[torch.LongTensor,
+            torch.LongTensor,
+            torch.LongTensor,
+            torch.LongTensor] :
         token_list = np.to_list()
 
         form_list = [token.get("form") for token in token_list]
@@ -60,18 +64,23 @@ class ComposerCONLLIterableDataset(CONLLIterableDatasetBase) :
         return *self.pad_fn(input_ids, dep_ids, head_idcs), output_id
 
 class DynamicComposerCONLLIterableDataset(CONLLIterableDatasetBase) :
-    def _create_layer(self, phrase, nodes) :
+    def _create_layer(self,
+            phrase: conllu.models.TokenList,
+            nodes: List[conllu.models.TokenTree]) -> List[Optional[conllu.models.TokenTree]] :
         layer = [None] * len(phrase)
         for node in nodes :
             layer[phrase.index(node)] = node
 
-    def create_sample(self, np) :
+    def create_sample(self, np: conllu.models.TokenTree) -> Tuple[torch.LongTensor,
+            List[torch.LongTensor],
+            List[torch.LongTensor],
+            torch.LongTensor] :
+        token_list = np.to_list()
+
         layers = [[np]]
-        while layer := self._create_layer(np,
+        while layer := self._create_layer(token_list,
                 [node.children for node in layers[-1]]) :
             layers.append(layer)
-
-        token_list = np.to_list()
 
         form_list = [token.get("form") for token in token_list]
         target_token = "_".join(form_list)
