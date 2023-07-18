@@ -108,8 +108,26 @@ Peter \textsc{Schoener} % Your name
 \pagenumbering{arabic}
 
 \section{Introduction}
+The Transformer is a shining example of the old saying that all models are wrong, but some are useful. Its indisputable success at many natural language tasks and its sudden adoption by the general public for everyday use prove that it can, when used correctly, generate plausible natural language.
+
+However, its approach to generating representations of language is fundamentally flawed. Although the attention mechanism and clever masking tricks can result in approximations of structure and inter-token dependencies, they do not fully capture it. Specifically, the model works on an approximation of whether two tokens are semantically compatible, rather than even a guess as to whether they are actually syntactically connected to each other.
+
+The goal here is to create a model that is less wrong (and hopefully at least as useful), in the sense that it explicitly uses structural information to generate its representation of a piece of text. This is not an entirely novel idea, though certainly in recent years the Transformer has attracted much more attention and investigation.
+
+There are at least two reasons to pursue a less wrong model. Firstly, if the model has a strong linguistic underpinning, it will be more explainable. Its behavior will be easier to analyze, allowing for improvements and safeguards to be more readily and confidently designed. Expectations of its behavior may also be easier to set if its weaknesses are easier to trace and pin down. Secondly, if the model can be encouraged through an appropriate architecture to generalize or discriminate across the right axes, it may be possible to achieve good results with less brute force. That is, we may get away with smaller models, which are easier and faster to train and host.
 
 \subsection{Scope}
+This goal of this project is a proof-of-concept for a novel architecture, rather than a new SOTA on any particular task (or set of tasks). In-scope is the creation of a small model, comparable in size and complexity to those that served as proofs of concept for the Transformer architecture. Explicitly out-of-scope are the creation of a large model, the use of heavily-supervised or specialized training data, exploration of the specific qualities of different generation methods, and extreme runtime optimizations (e.g. compiled kernels). However, the implementation of an encoder and a decoder, as well as the testing of each against natural language understanding or representation benchmarks, is explicitly within the scope of this project.
+
+The scoping of the size is sensible because if the central idea of this project is true, a Composer should be at least as able as a Transformer to distill meaning from a piece of text. If a Transformer of a given size can produce a useful result, a Composer of the same size should produce at least as good a result. Moreover, although many of today's dazzling Transformers are designed for enterprise use, subsidized demonstration, or shared tenancy, and therefore are worth expanding to huge numbers of parameters, the original proofs of concept that showed the viability of the architecture were comparatively tiny, small enough to run and even train on a home desktop. This is both the bar to which the Composer must be held, and a constraint of the resources available to the project.
+
+In the years since its introduction, a large body of work has sprung up around the Transformer, showing clever ways in which its output quality can be enhanced by, among other things, the use of specialized training data, the incorporation of more complex masking and positional embedding schemes, the selection of specific generation methods, and even careful choice of prompts. This is the result of a massive community effort over the course of several years, and can of course not be replicated within the scope of a single project. As such, the baseline will be a relatively naively implemented, trained, and prompted Transformer. If the Composer shows promise against that baseline, a similar refinement effort could always follow.
+
+Other, more general, methods by which the model might be improved, may also not be feasible to bring into scope in this project. Of course the size constraint rules out the distillation of a larger model. The careful crafting of a highly-optimized CUDA kernel or similar would be not only time-consuming and premature, but entirely beyond my ken.
+
+To demonstrate that we can create a model that better represents language, it is of course important that we build an encoder that performs well by itself (without a decoder). Evaluating this component in isolation is within scope, as it is crucial to determining whether the underpinnings of the model are as robust as they should be.
+
+However, it is not only important to real-world use, but also potentially indicative of underlying representation quality if an encoder-decoder or decoder-only model can perform well on generative tasks. The implementation of a decoder, and the testing of the encoder-decoder model against language understanding tasks, are within the scope of this project.
 
 \section{Related Work}
 
